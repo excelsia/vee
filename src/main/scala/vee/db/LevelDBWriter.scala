@@ -103,6 +103,15 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
   override protected def loadLastBlock(): Option[Block] = readOnly(db => db.get(Keys.blockAt(db.get(Keys.height))))
 
+  override protected def loadLastUpdateHeight(address: Address): Option[Int] = readOnly { db =>
+    addressId(address) match {
+      case Some(addrId) =>
+        Some(db.get(Keys.lastUpdateHeightOfAddr(addrId)))
+      case _ =>
+        None
+    }
+  }
+
   private def loadSposPortfolio(db: ReadOnlyDB, addressId: BigInt) = Portfolio(
     db.fromHistory(Keys.veeBalanceHistory(addressId), Keys.veeBalance(addressId)).getOrElse(0L),
     db.fromHistory(Keys.leaseBalanceHistory(addressId), Keys.leaseBalance(addressId)).getOrElse(LeaseInfo.empty),
@@ -182,6 +191,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
       val nextSeqNr = rw.get(kk) + 1
       rw.put(Keys.addressTransactionIds(addressId, nextSeqNr), txs)
       rw.put(kk, nextSeqNr)
+      rw.put(Keys.lastUpdateHeightOfAddr(addressId), height)
     }
 
     for ((id, (tx, _)) <- transactions) {
@@ -189,7 +199,6 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     }
 
     rw.put(Keys.transactionIdsAtHeight(height), transactions.keys.toSeq)
-
     expiredKeys.foreach(rw.delete(_, "expired-keys"))
   }
 
@@ -219,9 +228,19 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
             val kTxSeqNr = Keys.addressTransactionSeqNr(addressId)
             val txSeqNr  = rw.get(kTxSeqNr)
             val kTxIds   = Keys.addressTransactionIds(addressId, txSeqNr)
-            for (id <- rw.get(kTxIds).headOption; (h, _) <- rw.get(Keys.transactionInfo(id)) if h == currentHeight) {
-              rw.delete(kTxIds)
-              rw.put(kTxSeqNr, (txSeqNr - 1).max(0))
+            var lastHeight: Int = 0
+            for (id <- rw.get(kTxIds).headOption; (h, _) <- rw.get(Keys.transactionInfo(id)) if h <= currentHeight) {
+              if (h == currentHeight) {
+                rw.delete(kTxIds)
+                rw.put(kTxSeqNr, (txSeqNr - 1).max(0))
+              } else if (lastHeight < h) {
+                lastHeight = h
+              }
+            }
+            if (lastHeight > 0) {
+              rw.put(Keys.lastUpdateHeightOfAddr(addressId), lastHeight)
+            } else {
+              rw.delete(Keys.lastUpdateHeightOfAddr(addressId))
             }
           }
 
@@ -406,13 +425,8 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
       if balance > 0
     } yield db.get(Keys.idToAddress(addressId)) -> balance).toMap.seq
   }
-
+  
   override def snapshotAtHeight(acc: Address, h: Int): Option[Snapshot] = {
-    //TODO: StateReader
-    throw new NotImplementedError()
-  }
-
-  override def lastUpdateHeight(acc: Address): Option[Int] = {
     //TODO: StateReader
     throw new NotImplementedError()
   }

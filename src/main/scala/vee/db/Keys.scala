@@ -58,4 +58,6 @@ object Keys {
   def snapshot(addressId: BigInt)(height: Int): Key[Long] =
     Key("vee-snapshot", hAddr(50, height, addressId), Option(_).fold(0L)(Longs.fromByteArray), Longs.toByteArray)
 
+  def lastUpdateHeightOfAddr(addressId: BigInt) : Key[Int] = bytesSeqNr("last-update-height-address", 51, addressId.toByteArray)
+
 }

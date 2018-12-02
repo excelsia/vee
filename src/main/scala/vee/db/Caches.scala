@@ -52,8 +52,11 @@ trait Caches extends BlockChain {
   protected def loadAddressId(address: Address): Option[BigInt]
   protected def addressId(address: Address): Option[BigInt] = addressIdCache.get(address)
 
+  private val lastUpdateHeightCache: LoadingCache[Address, Option[Int]] = cache(maxCacheSize, loadLastUpdateHeight)
+  protected def loadLastUpdateHeight(address: Address): Option[Int]
+  override def lastUpdateHeight(address: Address): Option[Int] = lastUpdateHeightCache.get(address)
+
   protected def doAppend(block: Block,
-                         //carryFee: Long,
                          addresses: Map[Address, BigInt],
                          veeBalances: Map[BigInt, Long],
                          leaseBalances: Map[BigInt, LeaseInfo],

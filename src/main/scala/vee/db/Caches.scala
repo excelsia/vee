@@ -13,6 +13,7 @@ import scorex.block.Block
 import scorex.transaction.Transaction
 
 import scala.collection.JavaConverters._
+import scala.collection.SortedMap
 
 
 trait Caches extends BlockChain {
@@ -54,7 +55,13 @@ trait Caches extends BlockChain {
 
   private val lastUpdateHeightCache: LoadingCache[Address, Option[Int]] = cache(maxCacheSize, loadLastUpdateHeight)
   protected def loadLastUpdateHeight(address: Address): Option[Int]
+  protected def discardLastUpdateHeight(address: Address): Unit = lastUpdateHeightCache.invalidate(address)
   override def lastUpdateHeight(address: Address): Option[Int] = lastUpdateHeightCache.get(address)
+
+//  private val lastWeightedBalanceCache: LoadingCache[Address, Option[Long]] = cache(maxCacheSize, loadWeightedBalance)
+//  protected def loadWeightedBalance(address: Address): Option[Long]
+//  protected def discardLastWeightedBalance(address: Address): Unit = lastWeightedBalanceCache.invalidate(address)
+//  override def lastUpdateWeightedBalance(address: Address): Option[Long] = lastWeightedBalanceCache.get(address)
 
   protected def doAppend(block: Block,
                          addresses: Map[Address, BigInt],
@@ -62,7 +69,8 @@ trait Caches extends BlockChain {
                          leaseBalances: Map[BigInt, LeaseInfo],
                          leaseStates: Map[ByteStr, Boolean],
                          transactions: Map[ByteStr, (ProcessedTransaction, Set[BigInt])],
-                         addressTransactions: Map[BigInt, List[ByteStr]]
+                         addressTransactions: Map[BigInt, List[ByteStr]],
+                         snapshots: Map[Address, SortedMap[Int, Snapshot]]
                         ): Unit
 
   override def appendBlock(block: Block)(consensusValidation: => Either[ValidationError, BlockDiff]): Either[ValidationError, BlockDiff] = {
@@ -124,7 +132,8 @@ trait Caches extends BlockChain {
         leaseBalances.result(),
         diff.leaseState,
         newTransactions.result(),
-        diff.accountTransactionIds.map({ case (addr, txs) => addressId(addr) -> txs })
+        diff.accountTransactionIds.map({ case (addr, txs) => addressId(addr) -> txs }),
+        blockDiff.snapshots
       )
 
       for ((address, id) <- newAddressIds) addressIdCache.put(address, Some(id))

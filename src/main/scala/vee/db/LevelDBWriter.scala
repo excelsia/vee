@@ -1,6 +1,7 @@
 package vee.db
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
+
 import com.google.common.cache.CacheBuilder
 import scorex.account.Address
 import scorex.block.Block
@@ -17,7 +18,7 @@ import org.iq80.leveldb.DB
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.immutable
+import scala.collection.{SortedMap, immutable}
 
 object LevelDBWriter {
 
@@ -132,7 +133,8 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
                                   leaseBalances: Map[BigInt, LeaseInfo],
                                   leaseStates: Map[ByteStr, Boolean],
                                   transactions: Map[ByteStr, (ProcessedTransaction, Set[BigInt])],
-                                  addressTransactions: Map[BigInt, List[ByteStr]]
+                                  addressTransactions: Map[BigInt, List[ByteStr]],
+                                  snapshots: Map[Address, SortedMap[Int, Snapshot]]
                                   ): Unit = readWrite { rw =>
     val expiredKeys = new ArrayBuffer[Array[Byte]]
 
@@ -194,6 +196,11 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     }
 
     rw.put(Keys.transactionIdsAtHeight(height), transactions.keys.toSeq)
+
+//    for ((address, snapshotWithHeight) <- snapshots) {
+//      rw.put(Keys.snapshot(addressId)())
+//    }
+
     expiredKeys.foreach(rw.delete(_, "expired-keys"))
   }
 
@@ -273,6 +280,8 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
         }
 
         portfoliosToInvalidate.result().foreach(discardPortfolio)
+        portfoliosToInvalidate.result().foreach(discardLastUpdateHeight)
+        //portfoliosToInvalidate.result().foreach(discardLastWeightedBalance)
         discardedBlock
       }
 
@@ -341,6 +350,11 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     .maximumSize(100000)
     .recordStats()
     .build[(Int, BigInt), LeaseInfo]()
+
+
+  protected def loadWeightedBalance(address: Address): Option[Long] = {
+    throw new NotImplementedError()
+  }
 
   //Todo: Implement balanceSnapshots later
   /*
@@ -426,10 +440,10 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     throw new NotImplementedError()
   }
 
-  override def lastUpdateWeightedBalance(acc: Address): Option[Long] = {
-    //TODO: StateReader
-    throw new NotImplementedError()
-  }
+//  override def lastUpdateWeightedBalance(acc: Address): Option[Long] = {
+//    //TODO: StateReader
+//    throw new NotImplementedError()
+//  }
 
   override def slotAddress(id: Int): Option[String] = readOnly {
     //TODO: SPOS

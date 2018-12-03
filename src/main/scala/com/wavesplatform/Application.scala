@@ -94,7 +94,7 @@ class Application(val actorSystem: ActorSystem, val settings: VeeSettings) exten
       PaymentApiRoute(settings.restAPISettings, wallet, utxStorage, allChannels, time),
       UtilsApiRoute(settings.restAPISettings),
       PeersApiRoute(settings.restAPISettings, network.connect, peerDatabase, establishedConnections),
-      AddressApiRoute(settings.restAPISettings, wallet, stateReader, settings.blockchainSettings.functionalitySettings),
+      AddressApiRoute(settings.restAPISettings, wallet, /*Old(Remove later)*/stateReader, /*New*/chainState, settings.blockchainSettings.functionalitySettings),
       DebugApiRoute(settings.restAPISettings, wallet, stateReader, history, peerDatabase, establishedConnections, blockchainUpdater, allChannels, utxStorage),
       //WavesApiRoute(settings.restAPISettings, wallet, utxStorage, allChannels, time),
       //AssetsApiRoute(settings.restAPISettings, wallet, utxStorage, allChannels, stateReader, time),

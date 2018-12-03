@@ -1,11 +1,12 @@
 package scorex.api.http
 
 import java.nio.charset.StandardCharsets
-import javax.ws.rs.Path
 
+import javax.ws.rs.Path
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.server.Route
 import com.wavesplatform.settings.{FunctionalitySettings, RestAPISettings}
+import com.wavesplatform.state2.BlockChain
 import com.wavesplatform.state2.reader.StateReader
 import io.swagger.annotations._
 import play.api.libs.json._
@@ -19,15 +20,17 @@ import scala.util.{Failure, Success, Try}
 
 @Path("/addresses")
 @Api(value = "/addresses/", description = "Info about wallet's accounts and other calls about addresses")
-case class AddressApiRoute(settings: RestAPISettings, wallet: Wallet, state: StateReader, functionalitySettings: FunctionalitySettings) extends ApiRoute {
+case class AddressApiRoute(settings: RestAPISettings, wallet: Wallet, state: StateReader, chainState: BlockChain, functionalitySettings: FunctionalitySettings) extends ApiRoute {
   import AddressApiRoute._
 
   val MaxAddressesPerRequest = 1000
 
   override lazy val route =
     pathPrefix("addresses") {
-      validate ~ seed ~ balanceWithConfirmations ~ balanceDetails ~ balance ~ balanceWithConfirmations ~ verify ~ sign ~ deleteAddress ~ verifyText ~
-        signText ~ seq ~ publicKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations
+      validate ~ seed ~ balanceWithConfirmations ~ balanceDetails ~ balance ~ verify ~ sign ~ deleteAddress ~ verifyText ~
+        signText ~ seq ~ publicKey ~ effectiveBalance ~ effectiveBalanceWithConfirmations ~
+        /*Remove later*/ balanceForLevelDb ~ balanceDetailsForLevelDb ~ balanceWithConfirmationsForLevelDb ~
+        /*Remove later*/ effectiveBalanceForLevelDb ~ effectiveBalanceWithConfirmationsForLevelDb
     } ~ root ~ create
 
   @Path("/{address}")
@@ -171,6 +174,70 @@ case class AddressApiRoute(settings: RestAPISettings, wallet: Wallet, state: Sta
     }
   }
 
+  /*******************************************************/
+
+  //TODO/FIXME: Remove when DB changed
+  @Path("/debug-leveldb-balance/{address}")
+  @ApiOperation(value = "Balance", notes = "Account's balance", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path")
+  ))
+  def balanceForLevelDb: Route = (path("debug-leveldb-balance" / Segment) & get) { address =>
+    complete(balanceJsonWithLevelDB(address))
+  }
+
+  //TODO/FIXME: Remove when DB changed
+  @Path("/debug-leveldb-balance/details/{address}")
+  @ApiOperation(value = "Details for balance", notes = "Account's balances", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path")
+  ))
+  def balanceDetailsForLevelDb: Route = (path("debug-leveldb-balance" / "details" / Segment) & get) { address =>
+    complete(Address.fromString(address).right.map(acc => {
+      ToResponseMarshallable(balancesDetailsJsonWithLevelDB(acc))
+    }).getOrElse(InvalidAddress))
+  }
+
+  //TODO/FIXME: Remove when DB changed
+  @Path("/debug-leveldb-balance/{address}/{confirmations}")
+  @ApiOperation(value = "Confirmed balance", notes = "Balance of {address} after {confirmations}", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path"),
+    new ApiImplicitParam(name = "confirmations", value = "0", required = true, dataType = "integer", paramType = "path")
+  ))
+  def balanceWithConfirmationsForLevelDb: Route = {
+    (path("debug-leveldb-balance" / Segment / IntNumber) & get) { case (address, confirmations) =>
+      complete(balanceJsonWithLevelDB(address, confirmations))
+    }
+  }
+
+  //TODO/FIXME: Remove when DB changed
+  @Path("/debug-leveldb-effectiveBalance/{address}")
+  @ApiOperation(value = "Balance", notes = "Account's balance", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path")
+  ))
+  def effectiveBalanceForLevelDb: Route = {
+    path("debug-leveldb-effectiveBalance" / Segment) { address =>
+      complete(effectiveBalanceJsonWithLevelDB(address, 0))
+    }
+  }
+
+  //TODO/FIXME: Remove when DB changed
+  @Path("/debug-leveldb-effectiveBalance/{address}/{confirmations}")
+  @ApiOperation(value = "Confirmed balance", notes = "Balance of {address} after {confirmations}", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path"),
+    new ApiImplicitParam(name = "confirmations", value = "0", required = true, dataType = "integer", paramType = "path")
+  ))
+  def effectiveBalanceWithConfirmationsForLevelDb: Route = {
+    path("debug-leveldb-effectiveBalance" / Segment / IntNumber) { case (address, confirmations) =>
+      complete(
+        effectiveBalanceJsonWithLevelDB(address, confirmations)
+      )
+    }
+  }
+
   @Path("/seed/{address}")
   @ApiOperation(value = "Seed", notes = "Export seed value for the {address}", httpMethod = "GET")
   @ApiImplicitParams(Array(
@@ -267,6 +334,45 @@ case class AddressApiRoute(settings: RestAPISettings, wallet: Wallet, state: Sta
         acc.address,
         confirmations,
         state.effectiveBalanceAtHeightWithConfirmations(acc, state.height, confirmations))))
+        .getOrElse(InvalidAddress)
+    }
+  }
+
+  private def balanceJsonWithLevelDB(address: String, confirmations: Int): ToResponseMarshallable = {
+    Address.fromString(address).right.map(acc => ToResponseMarshallable(Balance(
+      acc.address,
+      confirmations,
+      chainState.balanceWithConfirmations(acc, confirmations)
+    ))).getOrElse(InvalidAddress)
+  }
+
+  private def balanceJsonWithLevelDB(address: String): ToResponseMarshallable = {
+    Address.fromString(address).right.map(acc => ToResponseMarshallable(Balance(
+      acc.address,
+      0,
+      chainState.balance(acc)
+    ))).getOrElse(InvalidAddress)
+  }
+
+  private def balancesDetailsJsonWithLevelDB(account: Address): BalanceDetails = {
+    chainState.read { _ =>
+      val portfolio = chainState.accountPortfolio(account)
+      BalanceDetails(
+        account.address,
+        portfolio.balance,
+        SPoSCalc.mintingBalance(chainState, functionalitySettings, account, chainState.height),
+        portfolio.balance - portfolio.leaseInfo.leaseOut,
+        chainState.effectiveBalance(account),
+        chainState.height)
+    }
+  }
+
+  private def effectiveBalanceJsonWithLevelDB(address: String, confirmations: Int): ToResponseMarshallable = {
+    chainState.read { _ =>
+      Address.fromString(address).right.map(acc => ToResponseMarshallable(Balance(
+        acc.address,
+        confirmations,
+        chainState.effectiveBalanceAtHeightWithConfirmations(acc, chainState.height, confirmations))))
         .getOrElse(InvalidAddress)
     }
   }

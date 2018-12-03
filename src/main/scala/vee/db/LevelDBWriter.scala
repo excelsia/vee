@@ -104,12 +104,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
   override protected def loadLastBlock(): Option[Block] = readOnly(db => db.get(Keys.blockAt(db.get(Keys.height))))
 
   override protected def loadLastUpdateHeight(address: Address): Option[Int] = readOnly { db =>
-    addressId(address) match {
-      case Some(addrId) =>
-        Some(db.get(Keys.lastUpdateHeightOfAddr(addrId)))
-      case _ =>
-        None
-    }
+    addressId(address).map(addrId => db.get(Keys.lastUpdateHeightOfAddr(addrId)))
   }
 
   private def loadSposPortfolio(db: ReadOnlyDB, addressId: BigInt) = Portfolio(
@@ -425,7 +420,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
       if balance > 0
     } yield db.get(Keys.idToAddress(addressId)) -> balance).toMap.seq
   }
-  
+
   override def snapshotAtHeight(acc: Address, h: Int): Option[Snapshot] = {
     //TODO: StateReader
     throw new NotImplementedError()

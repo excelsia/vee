@@ -287,9 +287,10 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
           discardedBlock
         }
 
-        portfoliosToInvalidate.result().foreach(discardPortfolio)
-        portfoliosToInvalidate.result().foreach(discardLastUpdateHeight)
-        portfoliosToInvalidate.result().foreach(discardLastWeightedBalance)
+        val addressSeq = portfoliosToInvalidate.result()
+        addressSeq.foreach(discardPortfolio)
+        addressSeq.foreach(discardLastUpdateHeight)
+        addressSeq.foreach(discardLastWeightedBalance)
         discardedBlock
       }
 
@@ -360,8 +361,14 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     .build[(Int, BigInt), LeaseInfo]()
 
 
-  protected def loadWeightedBalance(address: Address): Option[Long] = {
-    throw new NotImplementedError()
+  protected def loadLastWeightedBalance(address: Address): Option[Long] = readOnly { db =>
+    db.get(Keys.addressId(address)) match {
+      case Some(addressId) =>
+        val height = db.get(Keys.lastUpdateHeightOfAddr(addressId))
+        val snapshot = db.get(Keys.snapshot(addressId)(height))
+        Some(snapshot.weightedBalance)
+      case None => None
+    }
   }
 
   //Todo: Implement balanceSnapshots later
@@ -446,11 +453,6 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
   override def snapshotAtHeight(address: Address, h: Int): Option[Snapshot] = readOnly { db =>
     addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(h)))
   }
-
-//  override def lastUpdateWeightedBalance(acc: Address): Option[Long] = {
-//    //TODO: StateReader
-//    throw new NotImplementedError()
-//  }
 
   override def slotAddress(id: Int): Option[String] = readOnly {
     //TODO: SPOS

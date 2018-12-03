@@ -120,6 +120,20 @@ package object db {
     LeaseInfo(ndi.readLong(), ndi.readLong())
   }
 
+  def writeSnapshot(s: Snapshot): Array[Byte] = {
+    val ndo = newDataOutput()
+    ndo.writeInt(s.prevHeight)
+    ndo.writeLong(s.balance)
+    ndo.writeLong(s.effectiveBalance)
+    ndo.writeLong(s.weightedBalance)
+    ndo.toByteArray
+  }
+
+  def readSnapshot(data: Array[Byte]): Snapshot = Option(data).fold(Snapshot(0,0,0,0)) { d =>
+    val ndi = newDataInput(d)
+    Snapshot(ndi.readInt(), ndi.readLong(), ndi.readLong(), ndi.readLong())
+  }
+
   def readTransactionInfo(data: Array[Byte]): (Int, ProcessedTransaction) =
     (Ints.fromByteArray(data), ProcessedTransactionParser.parseBytes(data.drop(4)).get)
 

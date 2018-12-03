@@ -197,9 +197,16 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
     rw.put(Keys.transactionIdsAtHeight(height), transactions.keys.toSeq)
 
-//    for ((address, snapshotWithHeight) <- snapshots) {
-//      rw.put(Keys.snapshot(addressId)())
-//    }
+    for ((address, snapshotWithHeight) <- snapshots) {
+      rw.get(Keys.addressId(address)) match {
+        case Some(addressId) =>
+          for ((height, snapshot) <- snapshotWithHeight) {
+            rw.put(Keys.snapshot(addressId)(height), snapshot)
+          }
+        case None =>
+          log.warn(s"Cannot find address id for $address of snapshots")
+      }
+    }
 
     expiredKeys.foreach(rw.delete(_, "expired-keys"))
   }
@@ -220,6 +227,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
             rw.delete(Keys.leaseBalance(addressId)(currentHeight))
             rw.filterHistory(Keys.leaseBalanceHistory(addressId), currentHeight)
+            rw.delete(Keys.snapshot(addressId)(currentHeight))
 
             log.trace(s"Discarding portfolio for $address")
 
@@ -281,7 +289,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
         portfoliosToInvalidate.result().foreach(discardPortfolio)
         portfoliosToInvalidate.result().foreach(discardLastUpdateHeight)
-        //portfoliosToInvalidate.result().foreach(discardLastWeightedBalance)
+        portfoliosToInvalidate.result().foreach(discardLastWeightedBalance)
         discardedBlock
       }
 
@@ -435,9 +443,8 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     } yield db.get(Keys.idToAddress(addressId)) -> balance).toMap.seq
   }
 
-  override def snapshotAtHeight(acc: Address, h: Int): Option[Snapshot] = {
-    //TODO: StateReader
-    throw new NotImplementedError()
+  override def snapshotAtHeight(address: Address, h: Int): Option[Snapshot] = readOnly { db =>
+    addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(h)))
   }
 
 //  override def lastUpdateWeightedBalance(acc: Address): Option[Long] = {

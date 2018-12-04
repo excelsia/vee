@@ -61,6 +61,7 @@ trait Caches extends BlockChain {
   private val lastWeightedBalanceCache: LoadingCache[Address, Option[Long]] = cache(maxCacheSize, loadLastWeightedBalance)
   protected def loadLastWeightedBalance(address: Address): Option[Long]
   protected def discardLastWeightedBalance(address: Address): Unit = lastWeightedBalanceCache.invalidate(address)
+  protected def updateWeightedBalanceCache(address: Address, wb: Long): Unit = lastWeightedBalanceCache.put(address, Some(wb))
   override def lastUpdateWeightedBalance(address: Address): Option[Long] = lastWeightedBalanceCache.get(address)
 
   protected def doAppend(block: Block,

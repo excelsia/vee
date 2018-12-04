@@ -201,7 +201,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
         case Some(addressId) =>
           for ((height, snapshot) <- snapshotWithHeight) {
             rw.put(Keys.snapshot(addressId)(height), snapshot)
-            updateWeightedBalanceCache(address, snapshot.weightedBalance)
+            updateLastSnapshotCache(address, snapshot)
           }
           rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), height)
         case None =>
@@ -283,7 +283,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
         val addressSeq = portfoliosToInvalidate.result()
         addressSeq.foreach(discardPortfolio)
         addressSeq.foreach(discardLastBalanceUpdateHeight)
-        addressSeq.foreach(discardLastWeightedBalance)
+        addressSeq.foreach(discardLastSnapshot)
         discardedBlock
       }
 
@@ -352,17 +352,6 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     .maximumSize(100000)
     .recordStats()
     .build[(Int, BigInt), LeaseInfo]()
-
-
-  protected def loadLastWeightedBalance(address: Address): Option[Long] = readOnly { db =>
-    db.get(Keys.addressId(address)) match {
-      case Some(addressId) =>
-        val height = db.get(Keys.lastBalanceUpdateHeightOfAddr(addressId))
-        val snapshot = db.get(Keys.snapshot(addressId)(height))
-        Some(snapshot.weightedBalance)
-      case None => None
-    }
-  }
 
   //Todo: Implement balanceSnapshots later
   /*
@@ -443,8 +432,21 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     } yield db.get(Keys.idToAddress(addressId)) -> balance).toMap.seq
   }
 
+  protected def loadLastSnapshotFromDB(address: Address): Option[Snapshot] = readOnly { db =>
+    lastUpdateHeight(address) match {
+      case Some(lastHeight) =>
+        addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(lastHeight)))
+      case None => None
+    }
+  }
+
   override def snapshotAtHeight(address: Address, h: Int): Option[Snapshot] = readOnly { db =>
-    addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(h)))
+    lastUpdateHeight(address) match {
+      case Some(lastHeight) if h >= lastHeight =>
+        getLastSnapshot(address)  //load from cache
+      case _ =>
+        addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(h)))
+    }
   }
 
   override def slotAddress(id: Int): Option[String] = readOnly {

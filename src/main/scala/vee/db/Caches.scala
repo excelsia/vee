@@ -58,11 +58,14 @@ trait Caches extends BlockChain {
   protected def discardLastBalanceUpdateHeight(address: Address): Unit = lastBalanceUpdateHeightCache.invalidate(address)
   override def lastUpdateHeight(address: Address): Option[Int] = lastBalanceUpdateHeightCache.get(address)
 
-  private val lastWeightedBalanceCache: LoadingCache[Address, Option[Long]] = cache(maxCacheSize, loadLastWeightedBalance)
-  protected def loadLastWeightedBalance(address: Address): Option[Long]
-  protected def discardLastWeightedBalance(address: Address): Unit = lastWeightedBalanceCache.invalidate(address)
-  protected def updateWeightedBalanceCache(address: Address, wb: Long): Unit = lastWeightedBalanceCache.put(address, Some(wb))
-  override def lastUpdateWeightedBalance(address: Address): Option[Long] = lastWeightedBalanceCache.get(address)
+  private val lastSnapshotCache: LoadingCache[Address, Option[Snapshot]] = cache(maxCacheSize, loadLastSnapshotFromDB)
+  protected def loadLastSnapshotFromDB(address: Address): Option[Snapshot]
+  protected def discardLastSnapshot(address: Address): Unit = lastSnapshotCache.invalidate(address)
+  protected def updateLastSnapshotCache(address: Address, snapshot: Snapshot): Unit = lastSnapshotCache.put(address, Some(snapshot))
+  protected def getLastSnapshot(address: Address): Option[Snapshot] = lastSnapshotCache.get(address)
+
+
+  override def lastUpdateWeightedBalance(address: Address): Option[Long] = lastSnapshotCache.get(address).map(ss => ss.weightedBalance)
 
   protected def doAppend(block: Block,
                          addresses: Map[Address, BigInt],

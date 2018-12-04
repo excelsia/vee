@@ -199,9 +199,11 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
     for ((address, snapshotWithHeight) <- snapshots) {
       rw.get(Keys.addressId(address)) match {
         case Some(addressId) =>
-          for ((height, snapshot) <- snapshotWithHeight) {
-            rw.put(Keys.snapshot(addressId)(height), snapshot)
-            updateLastSnapshotCache(address, snapshot)
+          for ((h, snapshot) <- snapshotWithHeight) {
+            rw.put(Keys.snapshot(addressId)(h), Some(snapshot))
+            if (h == height) {
+              updateLastSnapshotCache(address, snapshot)
+            }
           }
           rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), height)
         case None =>
@@ -242,9 +244,13 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
               rw.delete(kTxIds)
               rw.put(kTxSeqNr, (txSeqNr - 1).max(0))
             }
-            val snapshot = rw.get(Keys.snapshot(addressId)(currentHeight))
-            rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), snapshot.prevHeight)
-            rw.delete(Keys.snapshot(addressId)(currentHeight))
+            rw.get(Keys.snapshot(addressId)(currentHeight)) match {
+              case Some(snapshot) =>
+                rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), snapshot.prevHeight)
+                rw.delete(Keys.snapshot(addressId)(currentHeight))
+              case None =>
+                log.warn(s"cannot find snapshot in DB for $address at $currentHeight")
+            }
           }
 
           val txIdsAtHeight = Keys.transactionIdsAtHeight(currentHeight)
@@ -433,11 +439,11 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
   }
 
   protected def loadLastSnapshotFromDB(address: Address): Option[Snapshot] = readOnly { db =>
-    lastUpdateHeight(address) match {
-      case Some(lastHeight) =>
-        addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(lastHeight)))
-      case None => None
-    }
+    for {
+      lastHeight <- lastUpdateHeight(address)
+      addrId <- addressId(address)
+      snapshot <- db.get(Keys.snapshot(addrId)(lastHeight))
+    } yield snapshot
   }
 
   override def snapshotAtHeight(address: Address, h: Int): Option[Snapshot] = readOnly { db =>
@@ -445,7 +451,10 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
       case Some(lastHeight) if h >= lastHeight =>
         getLastSnapshot(address)  //load from cache
       case _ =>
-        addressId(address).map(addrId => db.get(Keys.snapshot(addrId)(h)))
+        for {
+          addrId <- addressId(address)
+          snapshot <- db.get(Keys.snapshot(addrId)(h))
+        } yield snapshot
     }
   }
 

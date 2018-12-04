@@ -55,8 +55,8 @@ object Keys {
     //Key("address-transaction-ids", hBytes(42, seqNr, addressId.toByteArray), readTransactionIds, writeTransactionIds)
     Key("address-transaction-ids", hBytes(42, seqNr, addressId.toByteArray), readTxIds, writeTxIds)
 
-  def snapshot(addressId: BigInt)(height: Int): Key[Snapshot] =
-    Key("vee-snapshot", hAddr(50, height, addressId), readSnapshot, writeSnapshot)
+  def snapshot(addressId: BigInt)(height: Int): Key[Option[Snapshot]] =
+    Key.opt("vee-snapshot", hAddr(50, height, addressId), readSnapshot, writeSnapshot)
 
   def lastBalanceUpdateHeightOfAddr(addressId: BigInt) : Key[Int] = bytesSeqNr("last-update-height-address", 51, addressId.toByteArray)
 

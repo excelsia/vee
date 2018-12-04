@@ -188,7 +188,6 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
       val nextSeqNr = rw.get(kk) + 1
       rw.put(Keys.addressTransactionIds(addressId, nextSeqNr), txs)
       rw.put(kk, nextSeqNr)
-      rw.put(Keys.lastUpdateHeightOfAddr(addressId), height)
     }
 
     for ((id, (tx, _)) <- transactions) {
@@ -204,6 +203,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
             rw.put(Keys.snapshot(addressId)(height), snapshot)
             updateWeightedBalanceCache(address, snapshot.weightedBalance)
           }
+          rw.put(Keys.lastUpdateHeightOfAddr(addressId), height)
         case None =>
           log.warn(s"Cannot find address id for $address of snapshots")
       }

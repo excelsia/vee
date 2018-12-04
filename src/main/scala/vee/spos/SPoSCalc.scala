@@ -32,14 +32,17 @@ object SPoSCalc extends ScorexLogging {
     // here atHeight should be larger than lastHeight (validation)
 
     val lastHeight = state.lastUpdateHeight(account).getOrElse(0)
+    log.debug(s"Address ${account.address} last update height=$lastHeight")
     val lastWeightedBalance = state.lastUpdateWeightedBalance(account).getOrElse(0L)
     val lastEffectiveBalance = state.effectiveBalanceAtHeightWithConfirmations(account,lastHeight,0)
     val cntEffectiveBalance = state.effectiveBalance(account)
 
-    val weightedBalance = lastHeight == atHeight match {
-      case true => state.lastUpdateWeightedBalance(account).getOrElse(0L)
-      case _ => weightedBalaceCalc(atHeight - lastHeight, lastEffectiveBalance, lastWeightedBalance, cntEffectiveBalance, fs)
+    val weightedBalance = if (lastHeight == atHeight) {
+      state.lastUpdateWeightedBalance(account).getOrElse(0L)
+    } else {
+      weightedBalaceCalc(atHeight - lastHeight, lastEffectiveBalance, lastWeightedBalance, cntEffectiveBalance, fs)
     }
+    log.debug(s"MintingBalance calculation: lwb=$lastWeightedBalance leb=$lastEffectiveBalance ceb=$cntEffectiveBalance wb=$weightedBalance")
     weightedBalance
   }
 

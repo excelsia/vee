@@ -138,6 +138,7 @@ trait Caches extends BlockChain {
 
       for ((address, id) <- newAddressIds) addressIdCache.put(address, Some(id))
       for ((address, portfolio) <- newPortfolios.result()) portfolioCache.put(address, portfolio)
+      for ((address, _) <- diff.accountTransactionIds) lastUpdateHeightCache.put(address, Some(height))
 
       blockDiff
     } else {

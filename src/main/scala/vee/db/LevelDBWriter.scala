@@ -104,8 +104,8 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
   override protected def loadLastBlock(): Option[Block] = readOnly(db => db.get(Keys.blockAt(db.get(Keys.height))))
 
-  override protected def loadLastUpdateHeight(address: Address): Option[Int] = readOnly { db =>
-    addressId(address).map(addrId => db.get(Keys.lastUpdateHeightOfAddr(addrId)))
+  override protected def loadLastBalanceUpdateHeight(address: Address): Option[Int] = readOnly { db =>
+    addressId(address).map(addrId => db.get(Keys.lastBalanceUpdateHeightOfAddr(addrId)))
   }
 
   private def loadSposPortfolio(db: ReadOnlyDB, addressId: BigInt) = Portfolio(
@@ -203,7 +203,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
             rw.put(Keys.snapshot(addressId)(height), snapshot)
             updateWeightedBalanceCache(address, snapshot.weightedBalance)
           }
-          rw.put(Keys.lastUpdateHeightOfAddr(addressId), height)
+          rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), height)
         case None =>
           log.warn(s"Cannot find address id for $address of snapshots")
       }
@@ -249,9 +249,9 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
               }
             }
             if (lastHeight > 0) {
-              rw.put(Keys.lastUpdateHeightOfAddr(addressId), lastHeight)
+              rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), lastHeight)
             } else {
-              rw.delete(Keys.lastUpdateHeightOfAddr(addressId))
+              rw.delete(Keys.lastBalanceUpdateHeightOfAddr(addressId))
             }
           }
 
@@ -290,7 +290,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
         val addressSeq = portfoliosToInvalidate.result()
         addressSeq.foreach(discardPortfolio)
-        addressSeq.foreach(discardLastUpdateHeight)
+        addressSeq.foreach(discardLastBalanceUpdateHeight)
         addressSeq.foreach(discardLastWeightedBalance)
         discardedBlock
       }
@@ -365,7 +365,7 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
   protected def loadLastWeightedBalance(address: Address): Option[Long] = readOnly { db =>
     db.get(Keys.addressId(address)) match {
       case Some(addressId) =>
-        val height = db.get(Keys.lastUpdateHeightOfAddr(addressId))
+        val height = db.get(Keys.lastBalanceUpdateHeightOfAddr(addressId))
         val snapshot = db.get(Keys.snapshot(addressId)(height))
         Some(snapshot.weightedBalance)
       case None => None

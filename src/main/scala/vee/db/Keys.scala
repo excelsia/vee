@@ -58,6 +58,6 @@ object Keys {
   def snapshot(addressId: BigInt)(height: Int): Key[Snapshot] =
     Key("vee-snapshot", hAddr(50, height, addressId), readSnapshot, writeSnapshot)
 
-  def lastUpdateHeightOfAddr(addressId: BigInt) : Key[Int] = bytesSeqNr("last-update-height-address", 51, addressId.toByteArray)
+  def lastBalanceUpdateHeightOfAddr(addressId: BigInt) : Key[Int] = bytesSeqNr("last-update-height-address", 51, addressId.toByteArray)
 
 }

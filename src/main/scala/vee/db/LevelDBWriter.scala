@@ -228,7 +228,6 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
 
             rw.delete(Keys.leaseBalance(addressId)(currentHeight))
             rw.filterHistory(Keys.leaseBalanceHistory(addressId), currentHeight)
-            rw.delete(Keys.snapshot(addressId)(currentHeight))
 
             log.trace(s"Discarding portfolio for $address")
 
@@ -239,20 +238,13 @@ class LevelDBWriter(writableDB: DB, fs: FunctionalitySettings, val maxCacheSize:
             val kTxSeqNr = Keys.addressTransactionSeqNr(addressId)
             val txSeqNr  = rw.get(kTxSeqNr)
             val kTxIds   = Keys.addressTransactionIds(addressId, txSeqNr)
-            var lastHeight: Int = 0
-            for (id <- rw.get(kTxIds).headOption; (h, _) <- rw.get(Keys.transactionInfo(id)) if h <= currentHeight) {
-              if (h == currentHeight) {
-                rw.delete(kTxIds)
-                rw.put(kTxSeqNr, (txSeqNr - 1).max(0))
-              } else if (lastHeight < h) {
-                lastHeight = h
-              }
+            for (id <- rw.get(kTxIds).headOption; (h, _) <- rw.get(Keys.transactionInfo(id)) if h == currentHeight) {
+              rw.delete(kTxIds)
+              rw.put(kTxSeqNr, (txSeqNr - 1).max(0))
             }
-            if (lastHeight > 0) {
-              rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), lastHeight)
-            } else {
-              rw.delete(Keys.lastBalanceUpdateHeightOfAddr(addressId))
-            }
+            val snapshot = rw.get(Keys.snapshot(addressId)(currentHeight))
+            rw.put(Keys.lastBalanceUpdateHeightOfAddr(addressId), snapshot.prevHeight)
+            rw.delete(Keys.snapshot(addressId)(currentHeight))
           }
 
           val txIdsAtHeight = Keys.transactionIdsAtHeight(currentHeight)

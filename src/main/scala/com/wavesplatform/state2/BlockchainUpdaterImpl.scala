@@ -58,23 +58,22 @@ class BlockchainUpdaterImpl private(persisted: StateWriter with StateReader,
   }
 
   override def processBlock(block: Block): Either[ValidationError, Unit] = write { implicit l =>
+    //TODO/FIXME: remove old store method later
     if (topMemoryDiff().heightDiff >= minimumInMemoryDiffSize) {
       persisted.applyBlockDiff(bottomMemoryDiff())
       bottomMemoryDiff.set(topMemoryDiff())
       topMemoryDiff.set(BlockDiff.empty)
     }
-    //TODO/FIXME: remove old store method later
     val blockDiff = BlockDiffer.fromBlock(settings, currentPersistedBlocksState, historyWriter.lastBlock.map(_.timestamp))(block)
-    historyWriter.appendBlock(block)(blockDiff)
-    /*
     historyWriter.appendBlock(block)(blockDiff).map { newBlockDiff =>
       topMemoryDiff.set(Monoid.combine(topMemoryDiff(), newBlockDiff))
-    }.map(_ => log.trace(s"Block ${block.uniqueId} appended. New height: ${historyWriter.height()}, new score: ${historyWriter.score()}"))
-    */
+    }.map(_ => log.trace(s"(MVStore)Block ${block.uniqueId} appended. New height: ${historyWriter.height()}, new score: ${historyWriter.score()}"))
+
     //TODO/FIXME: implement new store method
-    chainState.appendBlock(block)(blockDiff).map { newBlockDiff =>
-      topMemoryDiff.set(Monoid.combine(topMemoryDiff(), newBlockDiff))
-    }.map(_ => log.trace(s"Block ${block.uniqueId} appended. New height: ${chainState.height}, new score: ${chainState.score}"))
+    val blockDiff2 = BlockDiffer.fromBlock(settings, chainState, chainState.lastBlock.map(_.timestamp))(block)
+    chainState.appendBlock(block)(blockDiff2).map(_ =>
+      log.debug(s"(LevelDB)Block ${block.uniqueId} appended. New height: ${chainState.height}, new score: ${chainState.score}")
+    )
   }
 
   override def removeAfter(blockId: ByteStr): Either[ValidationError, Seq[Transaction]] = write { implicit l =>
@@ -85,6 +84,7 @@ class BlockchainUpdaterImpl private(persisted: StateWriter with StateReader,
       case Some(height) =>
         logHeights(s"Rollback to h=$height started")
         val discardedTransactions = Seq.newBuilder[Transaction]
+        //TODO/FIXME: remove old method later
         while (historyWriter.height > height) {
           val transactions = historyWriter.discardBlock()
           log.trace(s"Collecting ${transactions.size} discarded transactions: $transactions")
@@ -106,6 +106,12 @@ class BlockchainUpdaterImpl private(persisted: StateWriter with StateReader,
                 bottomMemoryDiff.set(unsafeDiffByRange(persisted, persisted.height + 1, height + 1))
             }
           }
+        }
+        //TODO/FIXME: new method
+        while (chainState.height > height) {
+          val transactions = chainState.discardBlock()
+          log.trace(s"(LevelDB)Collecting ${transactions.size} discarded transactions: $transactions")
+          //discardedTransactions ++= transactions
         }
         logHeights(s"Rollback to h=$height completed:")
         Right(discardedTransactions.result())

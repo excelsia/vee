@@ -15,6 +15,7 @@ object LogLevel extends Enumeration {
 }
 
 case class VeeSettings(directory: String,
+                         dataDirectory: String,
                          loggingLevel: LogLevel.Value,
                          networkSettings: NetworkSettings,
                          walletSettings: WalletSettings,
@@ -33,6 +34,7 @@ object VeeSettings {
   val configPath: String = "vee"
   def fromConfig(config: Config): VeeSettings = {
     val directory = config.as[String](s"$configPath.directory")
+    val dataDirectory = config.as[String](s"$configPath.data-directory")
     val loggingLevel = config.as[LogLevel.Value](s"$configPath.logging-level")
 
     val networkSettings = config.as[NetworkSettings]("vee.network")
@@ -46,7 +48,7 @@ object VeeSettings {
     val synchronizationSettings = SynchronizationSettings.fromConfig(config)
     val utxSettings = config.as[UtxSettings]("vee.utx")
 
-    VeeSettings(directory, loggingLevel, networkSettings, walletSettings, blockchainSettings, checkpointsSettings,
+    VeeSettings(directory, dataDirectory, loggingLevel, networkSettings, walletSettings, blockchainSettings, checkpointsSettings,
       feesSettings, matcherSettings, minerSettings, restAPISettings, synchronizationSettings, utxSettings)
   }
 }
